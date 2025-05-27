@@ -1,1 +1,412 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jogo Pegue a Bolinha Completo</title>
+<style>
+  * {
+    margin: 0; padding: 0; box-sizing: border-box;
+  }
+  body {
+    background: linear-gradient(135deg, #283e51, #485563);
+    height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    user-select: none;
+  }
+  #gameWrapper {
+    position: relative;
+    width: 700px;
+    height: 500px;
+    background: #121212;
+    border-radius: 12px;
+    box-shadow: 0 0 30px #00ffd9;
+    overflow: hidden;
+  }
+  #gameArea {
+    position: relative;
+    width: 700px;
+    height: 450px;
+    background: #222;
+    border-radius: 12px 12px 0 0;
+    overflow: hidden;
+  }
+  #player {
+    position: absolute;
+    width: 45px;
+    height: 45px;
+    background: #f39c12;
+    border-radius: 10px;
+    box-shadow: 0 0 15px #f39c12aa;
+    top: 200px;
+    left: 325px;
+    transition: top 0.1s, left 0.1s;
+  }
+  .ball {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    background: #e74c3c;
+    border-radius: 50%;
+    box-shadow: 0 0 18px #e74c3ccc;
+  }
+  .obstacle {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    background: #555;
+    border-radius: 8px;
+    box-shadow: 0 0 12px #333;
+  }
+  .powerup {
+    position: absolute;
+    width: 35px;
+    height: 35px;
+    background: #27ae60;
+    border-radius: 50%;
+    box-shadow: 0 0 20px #27ae6077;
+    border: 2px solid #2ecc71;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    font-size: 24px;
+    user-select: none;
+  }
+  #scoreBoard {
+    height: 50px;
+    background: #111;
+    border-radius: 0 0 12px 12px;
+    font-size: 22px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: inset 0 0 10px #00ffd966;
+  }
+  #scoreBoard div {
+    user-select: none;
+  }
+  #startScreen, #gameOverScreen {
+    position: absolute;
+    top: 0; left: 0; width: 700px; height: 500px;
+    background: rgba(0,0,0,0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #00ffd9;
+    font-size: 28px;
+    border-radius: 12px;
+    z-index: 20;
+  }
+  #startScreen button, #gameOverScreen button {
+    margin-top: 20px;
+    padding: 12px 28px;
+    background: #00ffd9;
+    border: none;
+    border-radius: 8px;
+    color: #121212;
+    font-weight: bold;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  #startScreen button:hover, #gameOverScreen button:hover {
+    background: #00b3a6;
+  }
+</style>
+</head>
+<body>
+
+<div id="gameWrapper">
+  <div id="gameArea">
+    <div id="player"></div>
+  </div>
+  <div id="scoreBoard">
+    <div>Pontos: <span id="score">0</span></div>
+    <div>Nível: <span id="level">1</span></div>
+    <div>Tempo: <span id="time">60</span>s</div>
+  </div>
+  <div id="startScreen">
+    <h1>Jogo Pegue a Bolinha</h1>
+    <p>Use as setas para mover o quadrado amarelo.</p>
+    <p>Pegue as bolinhas vermelhas para ganhar pontos.</p>
+    <p>Evite os obstáculos cinzas!</p>
+    <p>Pegue os power-ups verdes para bônus.</p>
+    <p>O tempo é limitado e a dificuldade aumenta a cada nível.</p>
+    <button id="startBtn">Começar</button>
+  </div>
+  <div id="gameOverScreen" style="display:none;">
+    <h2>Fim de Jogo!</h2>
+    <p>Sua pontuação final: <span id="finalScore"></span></p>
+    <button id="restartBtn">Jogar Novamente</button>
+  </div>
+</div>
+
+<script>
+  const gameArea = document.getElementById('gameArea');
+  const player = document.getElementById('player');
+  const scoreDisplay = document.getElementById('score');
+  const levelDisplay = document.getElementById('level');
+  const timeDisplay = document.getElementById('time');
+  const startScreen = document.getElementById('startScreen');
+  const startBtn = document.getElementById('startBtn');
+  const gameOverScreen = document.getElementById('gameOverScreen');
+  const finalScore = document.getElementById('finalScore');
+  const restartBtn = document.getElementById('restartBtn');
+
+  const gameWidth = gameArea.clientWidth;
+  const gameHeight = gameArea.clientHeight;
+  const playerSize = 45;
+  let playerPos = {x: 325, y: 200};
+  let speed = 10;
+
+  let score = 0;
+  let level = 1;
+  let timeLeft = 60;
+  let gameInterval, timerInterval;
+
+  let keys = {};
+  let balls = [];
+  let obstacles = [];
+  let powerups = [];
+  let powerupActive = false;
+
+  // Sons simples (beeps)
+  const beep = new Audio('data:audio/wav;base64,UklGRhQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=');
+  const powerupSound = new Audio('data:audio/wav;base64,UklGRhQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=');
+
+  // Função para criar bolas vermelhas
+  function createBall() {
+    const ball = document.createElement('div');
+    ball.classList.add('ball');
+    placeObjectRandomly(ball, 30, 30);
+    gameArea.appendChild(ball);
+    balls.push(ball);
+  }
+
+  // Função para criar obstáculos
+  function createObstacle() {
+    const obstacle = document.createElement('div');
+    obstacle.classList.add('obstacle');
+    placeObjectRandomly(obstacle, 60, 60);
+    gameArea.appendChild(obstacle);
+    obstacles.push(obstacle);
+  }
+
+  // Função para criar power-up
+  function createPowerup() {
+    const powerup = document.createElement('div');
+    powerup.classList.add('powerup');
+    powerup.textContent = '⚡';
+    placeObjectRandomly(powerup, 35, 35);
+    gameArea.appendChild(powerup);
+    powerups.push(powerup);
+  }
+
+  function placeObjectRandomly(el, w, h) {
+    const x = Math.floor(Math.random() * (gameWidth - w));
+    const y = Math.floor(Math.random() * (gameHeight - h));
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+  }
+
+  // Mover jogador com setas
+  window.addEventListener('keydown', e => keys[e.key] = true);
+  window.addEventListener('keyup', e => keys[e.key] = false);
+
+  function movePlayer() {
+    if(keys['ArrowUp'] && playerPos.y > 0) playerPos.y -= speed;
+    if(keys['ArrowDown'] && playerPos.y < gameHeight - playerSize) playerPos.y += speed;
+    if(keys['ArrowLeft'] && playerPos.x > 0) playerPos.x -= speed;
+    if(keys['ArrowRight'] && playerPos.x < gameWidth - playerSize) playerPos.x += speed;
+
+    // Evitar passar por obstáculos
+    for(let obs of obstacles) {
+      const rect = obs.getBoundingClientRect();
+      const pRect = player.getBoundingClientRect();
+
+      if(isCollidingRects({x: playerPos.x, y: playerPos.y, w: playerSize, h: playerSize},
+                         {x: rect.left - gameArea.getBoundingClientRect().left,
+                          y: rect.top - gameArea.getBoundingClientRect().top,
+                          w: rect.width, h: rect.height})) {
+        // Reverte movimento
+        if(keys['ArrowUp']) playerPos.y += speed;
+        if(keys['ArrowDown']) playerPos.y -= speed;
+        if(keys['ArrowLeft']) playerPos.x += speed;
+        if(keys['ArrowRight']) playerPos.x -= speed;
+      }
+    }
+
+    player.style.top = playerPos.y + 'px';
+    player.style.left = playerPos.x + 'px';
+  }
+
+  function isCollidingRects(r1, r2) {
+    return !(r2.x > r1.x + r1.w || 
+             r2.x + r2.w < r1.x || 
+             r2.y > r1.y + r1.h ||
+             r2.y + r2.h < r1.y);
+  }
+
+  function checkCollisions() {
+    // Bolas vermelhas
+    for(let i = balls.length - 1; i >= 0; i--) {
+      let ball = balls[i];
+      const ballRect = ball.getBoundingClientRect();
+      const ballPosLocal = {
+        x: ballRect.left - gameArea.getBoundingClientRect().left,
+        y: ballRect.top - gameArea.getBoundingClientRect().top,
+        w: ballRect.width,
+        h: ballRect.height
+      };
+      const playerRect = {
+        x: playerPos.x,
+        y: playerPos.y,
+        w: playerSize,
+        h: playerSize
+      };
+
+      if(isCollidingRects(playerRect, ballPosLocal)) {
+        // Remove bola e ganha ponto
+        beep.play().catch(()=>{});
+        gameArea.removeChild(ball);
+        balls.splice(i, 1);
+        score++;
+        scoreDisplay.textContent = score;
+
+        // Cria nova bola
+        createBall();
+      }
+    }
+
+    // Power-ups
+    for(let i = powerups.length - 1; i >= 0; i--) {
+      let p = powerups[i];
+      const pRect = p.getBoundingClientRect();
+      const pPosLocal = {
+        x: pRect.left - gameArea.getBoundingClientRect().left,
+        y: pRect.top - gameArea.getBoundingClientRect().top,
+        w: pRect.width,
+        h: pRect.height
+      };
+      const playerRect = {
+        x: playerPos.x,
+        y: playerPos.y,
+        w: playerSize,
+        h: playerSize
+      };
+      if(isCollidingRects(playerRect, pPosLocal)) {
+        powerupSound.play().catch(()=>{});
+        gameArea.removeChild(p);
+        powerups.splice(i, 1);
+        activatePowerup();
+      }
+    }
+  }
+
+  function activatePowerup() {
+    if(powerupActive) return; // Só um powerup ativo por vez
+    powerupActive = true;
+    speed += 10; // + velocidade
+    let powerupTime = 5000; // 5 segundos
+
+    // Piscar jogador pra indicar power-up ativo
+    let blink = true;
+    const blinkInterval = setInterval(() => {
+      player.style.opacity = blink ? '0.5' : '1';
+      blink = !blink;
+    }, 300);
+
+    setTimeout(() => {
+      clearInterval(blinkInterval);
+      player.style.opacity = '1';
+      speed -= 10;
+      powerupActive = false;
+    }, powerupTime);
+  }
+
+  function updateTimer() {
+    timeLeft--;
+    timeDisplay.textContent = timeLeft;
+
+    if(timeLeft <= 0) {
+      endGame();
+    }
+  }
+
+  function increaseLevel() {
+    level++;
+    levelDisplay.textContent = level;
+    speed += 2;
+    // Aumentar obstáculos e powerups em níveis altos
+    if(level % 2 === 0) {
+      createObstacle();
+    }
+    if(level % 3 === 0) {
+      createPowerup();
+    }
+  }
+
+  function gameLoop() {
+    movePlayer();
+    checkCollisions();
+
+    if(score > 0 && score % 5 === 0 && level < Math.floor(score / 5) + 1) {
+      increaseLevel();
+    }
+  }
+
+  function startGame() {
+    // Reset variáveis
+    score = 0;
+    level = 1;
+    timeLeft = 60;
+    speed = 10;
+    scoreDisplay.textContent = score;
+    levelDisplay.textContent = level;
+    timeDisplay.textContent = timeLeft;
+    playerPos = {x: 325, y: 200};
+    player.style.top = playerPos.y + 'px';
+    player.style.left = playerPos.x + 'px';
+
+    // Limpar bolas, obstáculos e powerups antigos
+    balls.forEach(b => gameArea.removeChild(b));
+    obstacles.forEach(o => gameArea.removeChild(o));
+    powerups.forEach(p => gameArea.removeChild(p));
+    balls = [];
+    obstacles = [];
+    powerups = [];
+    powerupActive = false;
+
+    // Criar objetos iniciais
+    createBall();
+    createObstacle();
+
+    startScreen.style.display = 'none';
+    gameOverScreen.style.display = 'none';
+
+    gameInterval = setInterval(gameLoop, 100);
+    timerInterval = setInterval(updateTimer, 1000);
+  }
+
+  function endGame() {
+    clearInterval(gameInterval);
+    clearInterval(timerInterval);
+    finalScore.textContent = score;
+    gameOverScreen.style.display = 'flex';
+  }
+
+  startBtn.onclick = () => startGame();
+  restartBtn.onclick = () => startGame();
+
+</script>
+
+</body>
+</html>
 
